@@ -1,0 +1,12 @@
+# 默认按文本处理并统一为 LF 入库
+* text=auto
+
+# 构建产物：按字节存取，不做 EOL 转换。
+# 否则 Windows 检出成 CRLF、tsc 重新生成 LF，每次 build 都会把 dist 标脏。
+packages/dsh-redteam-lead/dist/** -text
+
+# 二进制
+*.png binary
+*.ico binary
+docs/examples/** -text
+

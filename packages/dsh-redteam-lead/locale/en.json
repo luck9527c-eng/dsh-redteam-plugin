@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Red Team Lead",
+    "description": "Red-team lead preset: rt_roster / rt_dispatch / rt_conclude against the host agent-team service, plus a read-only doctor CLI."
+  }
+}

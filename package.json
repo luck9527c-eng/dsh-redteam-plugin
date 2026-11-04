@@ -1,0 +1,16 @@
+{
+  "name": "dsh-redteam-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "dsh-redteam-plugin 开发仓库：workspace 级构建与验证脚本（不发布）。",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/build.mjs && node --test \"packages/dsh-redteam-lead/test/**/*.test.mjs\"",
+    "typecheck": "node node_modules/typescript/bin/tsc -p packages/dsh-redteam-lead/tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

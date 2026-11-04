@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "红队指挥",
+    "description": "红队指挥 preset：用 rt_roster / rt_dispatch / rt_conclude 驱动宿主团队服务，并附带一个只读 doctor 自检命令。"
+  }
+}

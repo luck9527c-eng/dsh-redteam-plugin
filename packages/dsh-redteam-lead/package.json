@@ -1,0 +1,24 @@
+{
+  "name": "@local/dsh-redteam-lead",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "红队指挥（redteam-lead）preset 的位置约束层：角色闸 + 两套人设 + 工兵工具遮罩。零运行时依赖、纯 ESM、不 import 任何 @deepseek-ai 包、不注册任何工具。",
+  "exports": {
+    ".": "./dist/index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "locale",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

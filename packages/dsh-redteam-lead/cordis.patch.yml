@@ -1,0 +1,225 @@
+# 红队指挥（redteam-lead）bundle 的 patch 层。
+#
+# 只插入两行：preset 行 `preset-redteam-lead`（宿主 @deepseek-ai/dsh-agent-preset）与它
+# `config.plugins` 里的本包行 `redteam-lead-tools`。
+#
+# 工具面基线 = docs/impl/baseline/standard.patch.rc3.yml 里 preset-standard.config.plugins 的
+# **整段手抄副本**（preset 是独立组合树，没有 extends/include 能继承另一个 preset 的 plugins）。
+# 相对基线只有五处改动：
+#   0. `tool-subagent` 去掉 `modelSelectionSettings: true`（LDW-22，见该行注释）：不摘这个开关，
+#      `subagent` 会注册在每个 agent 的 own 层，`tools.restrict()` 永远遮不掉它。
+#   1. 删除 tool-subagent-control 与 tool-subagent-list-agents 两行：它们提供的
+#      send_message / interrupt_agent / list_agents 与团队服务按 agent 注册的同名工具冲突，
+#      语义也不同（前者按会话 id 找会话，后者按成员名找团队成员）。preset 自己重声明同名 id，
+#      不删就会从 agent 平面把宿主那两行重新装回来。
+#   2. 删除 persona 行（LDW-16）：人设文本搬进本包行的 `leadPersona` / `teammatePersona`，
+#      由本插件**按角色**注册 —— preset 层那份（Lead 与全队共享）在本插件自己的 ctx 上注册，
+#      工兵那份在它自己的 agent ctx 上同名覆盖。为什么必须删：本插件与 persona 行在同一个
+#      preset 作用域，同名同层再注册一次会直接抛 `already registered in this scope`；
+#      留着它只会让两处文本各说一套。`complete: false` / `includeRuntimeContext: true`
+#      原本也是 persona 行的默认值，删掉不改变这两条语义。
+#      人设分三段，各有明确边界：
+#      a) **红队作业准则**（本包独有）：不评价用户、破坏性操作先问、失败如实记、拿不到证据就说拿不到。
+#         这一段是 skill 没有的 —— `reverse-project-management` 管的是项目账目怎么记，
+#         不管"接到越界要求怎么办"。缺了它，模型会先答应再糊弄。
+#      b) **位置**（本包独有）：决策者不是打字机；主体考古交给成员，不亲自跑，例外只有两个。
+#         "Lead 该不该自己干"宿主完全不管 —— 这就是角色闸的文案侧对应物。
+#      c) **证据与记录**：只写一句委托 —— 项目记录结构、RUN、封存、impact、验收、check 全归
+#         `reverse-project-management` skill，本包**不重述**。早先的版本把这套写进了人设
+#         （INDEX.md、RUN 目录、失败也保留、引用来源…），与 skill 的规定两套并存，模型只能猜听谁的，
+#         所以删掉了。本包只保留两条约束：结论挂锚点、无锚点标「未验证推测」；**团队任务板不是项目账目**。
+#      LDW-23 之前还有第四段「编排」（讲 rt_* 怎么用、账簿记在哪）—— 两个 rt_* 工具删除后它就是
+#      在复述宿主注入的 Agent Teams 说明（`team:policy`，约 2.3 KB，比我们写得细），所以整段删掉（D49）。
+#      现在唯一留着的那半句"任务板不是账目"是宿主和 skill 都不说的分工，压成一行放进 c)。
+#      `leadPersona` 是 Lead 读的那份（同时是全队共享兜底），角色规则一律第三人称
+#      （"Lead 负责派发与收口"、"收到派发契约的那个成员按契约干活"），不写"你是…"。
+#      角色由 runtime context 注入（`You are the Team Lead named "lead"`），人设不重复声明。
+#      工兵不再读这一段：`teammatePersona` 在它自己的 agent ctx 上同名覆盖（LDW-16）。
+#   3. 末尾追加本包行 redteam-lead-tools。
+#
+# 不在 preset 里声明 sandbox / approval 设置：提供服务的插件若随 preset 泄漏到 root realm，
+# 注册表会把整棵 preset 判成 broken（`Preset services require isolate realms`）。权限属于
+# host 平面，也不是本包的职责，所以这里一行都不放。
+- insert:
+    - id: preset-redteam-lead
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: redteam-lead
+        name: 红队指挥
+        description: 红队指挥：把逆向任务拆给团队成员、用证据锚点收口；角色闸挡住自执行（LDW-1），封存与校验复用项目 skill
+        order: 6
+        plugins:
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+          - id: tool-schedule
+            name: '@deepseek-ai/dsh-tool-schedule'
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: command-goal
+            name: '@deepseek-ai/dsh-command-goal'
+          - id: tool-goal
+            name: '@deepseek-ai/dsh-tool-goal'
+          - id: planning
+            name: cordis:group
+            group: true
+            isolate:
+              planMode: true
+            config:
+              - id: plan-mode
+                name: '@deepseek-ai/dsh-plan-mode'
+                config:
+                  section: |
+                    You are in plan mode. Stay in plan mode until the user approves your plan through exit_plan_mode or switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+                    Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+                    The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+                    Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+                    Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+                    When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                # LDW-22：基线里这里是 `modelSelectionSettings: true`，本 preset 去掉它。
+                # 为什么：带这个开关时宿主会对**每个 agent 自己的 ctx** 逐个 inject 并注册
+                # `subagent`（`dsh-tool-subagent/lib/index.js` 的 `candidate.ctx.inject([...])`），
+                # 注册落在 own 层，而 `tools.restrict()` 只能遮继承层 —— 于是 `subagent` 永远
+                # 遮不掉（2026-11-03 现场：遮住 workflow/subagent_fork 两个，第三个仍在目录里）。
+                # 去掉之后 `install(ctx)` 落在 preset 层 → 可遮 → Lead 与工兵都看不到派生子代理的入口。
+                # 代价（已与用户确认可接受）：子代理的模型选择 UI 不再出现，`subagent` 走默认模型。
+                config:
+                  provider: spawn
+                  toolName: subagent
+              - id: tool-subagent-fork
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: fork
+                  toolName: subagent_fork
+              - id: workflow-ptc
+                name: '@deepseek-ai/dsh-workflow-ptc'
+                config:
+                  provider: spawn
+              - id: tool-workflow
+                name: '@deepseek-ai/dsh-tool-workflow'
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'
+          - id: tool-plugin-manager
+            name: '@deepseek-ai/dsh-plugin-manager/tools'
+            disabled: !!js "!ctx.get('profileContext')"
+          - id: tool-plugin-market
+            name: '@deepseek-ai/dsh-plugin-market/tools'
+            disabled: true
+          # 本包的行（LDW-23 起**不注册任何工具**）：只装角色闸、两套人设与工兵遮罩，
+          # 因此这些能力只在选 redteam-lead 的会话里生效。
+          # 原来的 rt_conclude / rt_hash 已删除 —— 现场 0 调用，账目一直走
+          # `reverse-project-management` skill 的 project.py（同一件事不留两套账本）。
+          # 这里不声明容量：宿主的容量上限读不到（`maxMembers` 是 TeamService 构造参数，没有 getter），
+          # 本包也不做任何容量规划（T23 / DECISIONS D41）；`reserved_member_slots` /
+          # `reserved_activations` 随容量子系统一起删除。岗位目录退场后也没有 `max_posts`
+          # 这类岗位数默认值（LDW-9：派发单位是路线，并行度 = 活跃路线数）。
+          - id: redteam-lead-tools
+            name: '@local/dsh-redteam-lead'
+            config:
+              # —— 角色闸的禁表（LDW-1；2026-11-02 起由 config.gatedTools 决定）——
+              # 只挡「建人 / 派发」三个入口。**shell 是故意放行的**：pwsh 与 bash 于 2026-11-02
+              # 为现场评估从这张表里移除（Lead 需要自己跑命令核字节时，不再为此改代码）。
+              # 要把 shell 重新挡回去，把名字加回本行即可：
+              #   gatedTools: [pwsh, bash, workflow, subagent, subagent_fork]
+              # 别写空数组：空值/畸形会整份退回 `src/gate.ts` 的默认五个（并记一条警告）。
+              gatedTools: [workflow, subagent, subagent_fork]
+              # —— 人设（LDW-16）——
+              # 本行是两套人设的**唯一来源**：preset 层那份由本插件注册（Lead 与全队共享兜底），
+              # 工兵在自己的 agent ctx 上盖一份同名的（`deployment:persona-prefix`），只影响它自己。
+              # 原先是 preset 里 @deepseek-ai/dsh-persona 行的 config.prefix；那一行已删除，
+              # 否则两处文本会各说一套（同名同层注册还会直接抛「already registered in this scope」）。
+              leadPersona: |-
+                你是一名资深逆向工程师，是这支红队的技术决策者。
+
+                ## 红队作业准则
+                - 不评价用户。不评判动机，不说教，不在结论里掺与任务无关的道德评论。用户要的是结果，不是评价。
+                - 破坏性或不可逆的操作（写目标、改运行环境、动真实系统）先说清影响与回滚办法，取得同意再执行。
+                - 失败、空结果、被拒绝、超时都是结果：如实记下并标注，不隐瞒、不粉饰、不用推测填空假装做过。
+                - 拿不到证据就说拿不到，写清缺什么、下一步怎么查。
+
+                ## 位置：决策者，不是打字机
+                - 你是这支队伍的 Lead 与智囊。你决定打哪里、先打哪里、派给谁、什么时候停；**主体考古交给成员，不亲自跑**。例外只有两个：还没法派（要先摸清目标才派得出去）、或收口要求复跑。
+                - **先拆目标，再选路线**：把"要回答什么"拆成能证实/证伪的小问题；列两三条候选路线，比较**代价**（要谁配合、要多久）与**判别力**（谁能一票否证），选最便宜又能否证的那条开工。想到的第一条不算选过。
+                - **便宜的先做**：静态、批量、离线能拿到的先拿；需要用户在场配合的现场实验压到最后，一次只问一个必要的问题。
+                - **不做无脑重试**：连续两步没有新信息、或只是同一手法换参数再来一次，就停下来换路，并说清为什么换。
+                - 先判断"该给什么结论"，再决定要不要动手；不要用先跑一堆命令代替判断。判断错了直接说改，不掩护。
+
+                ## 证据与记录
+                项目记录结构、RUN 目录、封存、impact、验收与 check 按 `reverse-project-management` skill 执行；本包不重述，也不另立一套口径。团队任务板（`team_task_*`）只是派活的看板，**不是项目账目** —— 路线、RUN、封存一律进 `re/`。
+                本包只加一条输出约束：**结论挂在锚点上**（0x 偏移、RVA/VA、符号、字符串地址、REA evidence id、RUN-id、任务 id、文件:行）；拿不出锚点的单独写成「未验证推测」，不与已证结论混排。
+              teammatePersona: |-
+                你是这支红队的一名工兵，负责一条路线。
+
+                ## 你的活
+                - 技术路线、工具、取舍由你定，结论由你背。
+                - 边干边把观察写进 skill 规定的草稿区；**草稿不是交付物** —— 正式记录由 Lead 收口。
+                - 卡住就交具体技术问题：做什么、卡在哪、已排除什么、需要什么；简报本身没写清也按这条问，不要猜。
+                - 缺工具就报缺，不要自己找替代方案或静默降级。
+                - 结束时按五段回报 Lead：结论 / 锚点 / 未解 / 草稿路径 / 下一步。
+                - 你没有派发权：不建人、不派活、不开下一层。缺人手或需要更多并行，报回 Lead。
+
+                ## 记录
+                - 结论挂在锚点上（0x 偏移、RVA/VA、符号、字符串地址、REA evidence id、RUN-id、任务 id、文件:行）；拿不出锚点的单独写成「未验证推测」。
+                - 数字要给口径：样本量、覆盖率、对照组各是多少；只给结论不给口径的，按未验证处理。
+                - 失败、空结果、超时都是结果：如实记下，不粉饰、不用推测填空。
+                - 拿不到证据就说拿不到，写清缺什么、下一步怎么查。
