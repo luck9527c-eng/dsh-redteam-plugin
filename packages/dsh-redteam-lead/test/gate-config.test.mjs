@@ -142,7 +142,7 @@ test('缺省不配 gatedTools：五个默认名字照旧被拒，且没有配置
   assert.deepEqual(configWarnings, [], '没写配置就不是错误：一条配置警告都不能有')
 })
 
-// —— 窄化：验证配置能把默认五个收窄（shipped 已不再用窄表，仍是五个全挡） ——
+// —— 窄化：这就是 shipped 配置的形状（pwsh/bash 被移出） ——
 
 test('窄化配置：pwsh 放行、workflow 仍拒；遮罩只遮配置里的名字', async () => {
   const { lead, configWarnings, gate } = install({ gatedTools: ['workflow'] })

@@ -161,7 +161,7 @@ const ALLOW = Object.freeze({ kind: 'allow' });
 export function denyReason(tool) {
     return (`[redteam-lead] 拒绝执行 ${tool}：Lead 不亲自执行。` +
         '把这件事派给工兵——用底座的 spawn_teammate 建人（一条路线一个人，开场简报手写），派活与追问用 send_message，任务用 team_task_*；' +
-        '项目账目同样派出去：project.py 的 seal / index / check / impact 交给一名工兵按你的指令原样执行（只跑命令、不改判断），输出交回你核对；' +
+        'Lead 只做核对与记录：项目账目走 reverse-project-management skill 的 project.py（index / check / seal），' +
         '核对与验证用 read / grep，已派出的后台作业用 job_list / job_output 读结果。');
 }
 /**
