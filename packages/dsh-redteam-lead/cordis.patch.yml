@@ -177,12 +177,11 @@
             name: '@local/dsh-redteam-lead'
             config:
               # —— 角色闸的禁表（LDW-1；2026-11-02 起由 config.gatedTools 决定）——
-              # 只挡「建人 / 派发」三个入口。**shell 是故意放行的**：pwsh 与 bash 于 2026-11-02
-              # 为现场评估从这张表里移除（Lead 需要自己跑命令核字节时，不再为此改代码）。
-              # 要把 shell 重新挡回去，把名字加回本行即可：
-              #   gatedTools: [pwsh, bash, workflow, subagent, subagent_fork]
+              # 2026-11-07：shell 也挡回去了。Lead 现在**没有任何执行通道** —— 项目账目那几条命令
+              # （project.py 的 seal / index / check / impact）同样派给工兵跑：只执行、不改判断，
+              # 输出交回 Lead 核对。要临时放开 shell，把 pwsh / bash 从本行删掉即可。
               # 别写空数组：空值/畸形会整份退回 `src/gate.ts` 的默认五个（并记一条警告）。
-              gatedTools: [workflow, subagent, subagent_fork]
+              gatedTools: [pwsh, bash, workflow, subagent, subagent_fork]
               # —— 人设（LDW-16）——
               # 本行是两套人设的**唯一来源**：preset 层那份由本插件注册（Lead 与全队共享兜底），
               # 工兵在自己的 agent ctx 上盖一份同名的（`deployment:persona-prefix`），只影响它自己。

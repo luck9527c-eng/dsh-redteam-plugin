@@ -121,8 +121,8 @@ test('patch：本包行的 config 只有 gatedTools 与人设两项（不再有�
   assert.deepEqual([...new Set(keys)].sort(), ['gatedTools', 'leadPersona', 'teammatePersona'])
 })
 
-test('patch：禁表仍是 shipped 的那三个（shell 放行）', () => {
-  assert.match(PATCH, /^\s*gatedTools:\s*\[workflow, subagent, subagent_fork\]\s*$/mu)
+test('patch：禁表是 shipped 的那五个（shell 也挡，Lead 没有执行通道）', () => {
+  assert.match(PATCH, /^\s*gatedTools:\s*\[pwsh, bash, workflow, subagent, subagent_fork\]\s*$/mu)
 })
 
 test('人设文本：Lead 那份不再提 rt_*（工具已删，提了就是让模型找不存在的东西）', () => {
