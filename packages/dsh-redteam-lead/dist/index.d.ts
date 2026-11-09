@@ -8,6 +8,7 @@
  * | **角色闸**：会话根（Lead）不亲自调派发类工具，顺手把配置里的那几个名字从它的目录里摘掉 | `src/gate.ts` | `tools/pre-execute` 瀑布 + `tools.restrict` |
  * | **人设分离**：Lead 一份、工兵一份（工兵在自己 ctx 上盖同名段），文本全部来自本行配置 | `src/persona.ts` | `deployment:persona-prefix` |
  * | **工兵遮罩**：非 Lead 的团队成员看不到派发/建人入口 | `src/gate.ts` | `tools.restrict` |
+ * | **工兵固定路由**：非 root 成员建出来后钉住 provider/model/effort，Lead 自己选什么都不受影响 | `src/teammate-model.ts` | `agent.model.select` |
  *
  * LDW-23：**本包原来的两个 `rt_*` 记账工具已删除**（按路线收口 / 只读核字节那对）。理由不是"不好用"，
  * 而是现场从来没调过它们：2026-11-02 那轮 3 小时 32 分的会话里 8 次封存全走

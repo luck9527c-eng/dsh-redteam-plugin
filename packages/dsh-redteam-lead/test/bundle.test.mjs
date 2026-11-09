@@ -110,7 +110,7 @@ test('patch（LDW-22）：tool-subagent 不再声明 modelSelectionSettings，su
   assert.deepEqual(lines, [], '这个开关会让 subagent 注册在 own 层，遮罩永远遮不掉')
 })
 
-test('patch：本包行的 config 只有 gatedTools 与人设两项（不再有工具相关键）', () => {
+test('patch：本包行的 config 只有 gatedTools、两套人设与工兵路由四项（不再有工具相关键）', () => {
   const start = PATCH.indexOf(`- id: ${ADDED_ROW}`)
   assert.ok(start >= 0)
   const tail = PATCH.slice(start)
@@ -118,7 +118,7 @@ test('patch：本包行的 config 只有 gatedTools 与人设两项（不再有�
   assert.ok(configStart >= 0, '本包行必须有 config')
   const body = tail.slice(configStart)
   const keys = [...body.matchAll(/^\s{14}([A-Za-z][A-Za-z0-9]*):/gmu)].map((match) => match[1])
-  assert.deepEqual([...new Set(keys)].sort(), ['gatedTools', 'leadPersona', 'teammatePersona'])
+  assert.deepEqual([...new Set(keys)].sort(), ['gatedTools', 'leadPersona', 'teammateModel', 'teammatePersona'])
 })
 
 test('patch：禁表是 shipped 的那五个（shell 也挡，Lead 没有执行通道）', () => {

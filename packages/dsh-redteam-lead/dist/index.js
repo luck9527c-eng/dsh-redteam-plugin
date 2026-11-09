@@ -8,6 +8,7 @@
  * | **角色闸**：会话根（Lead）不亲自调派发类工具，顺手把配置里的那几个名字从它的目录里摘掉 | `src/gate.ts` | `tools/pre-execute` 瀑布 + `tools.restrict` |
  * | **人设分离**：Lead 一份、工兵一份（工兵在自己 ctx 上盖同名段），文本全部来自本行配置 | `src/persona.ts` | `deployment:persona-prefix` |
  * | **工兵遮罩**：非 Lead 的团队成员看不到派发/建人入口 | `src/gate.ts` | `tools.restrict` |
+ * | **工兵固定路由**：非 root 成员建出来后钉住 provider/model/effort，Lead 自己选什么都不受影响 | `src/teammate-model.ts` | `agent.model.select` |
  *
  * LDW-23：**本包原来的两个 `rt_*` 记账工具已删除**（按路线收口 / 只读核字节那对）。理由不是"不好用"，
  * 而是现场从来没调过它们：2026-11-02 那轮 3 小时 32 分的会话里 8 次封存全走
@@ -31,6 +32,8 @@
 import { DEFAULT_GATED_TOOLS, GATE_LABEL, installRoleGate, installTeammateMask, logAt } from './gate.js';
 // —— 人设（LDW-16）：preset 层那份归 Lead，工兵在自己 ctx 上盖一份同名的 ——
 import { installPresetPersona, installTeammatePersona } from './persona.js';
+// —— 工兵固定路由（2026-11-09）：非 root 成员建出来后钉住 provider/model/effort ——
+import { installTeammateModel } from './teammate-model.js';
 import { recordOf } from './guards.js';
 /** 插件名（插件清单/日志用）。 */
 export const name = 'redteam-lead-tools';
@@ -134,6 +137,9 @@ export function apply(ctx, config = {}) {
     // 再让每个非 Lead 的团队成员在自己 ctx 上盖同名段（scoped 遮蔽 preset 那份，只影响自己）。
     installPresetPersona(ctx, config);
     installTeammatePersona(ctx, config);
+    // 工兵固定路由（2026-11-09）：宿主让子 agent 继承父的路由，所以 Lead 选什么，工兵就跟着用什么。
+    // 这一条把工兵钉死在配置的 provider/model/effort 上，Lead 自己怎么选都不受影响。
+    installTeammateModel(ctx, config);
     // 工兵遮罩（LDW-15 / LDW-21）：非 Lead 的团队成员看不到 subagent / subagent_fork / workflow。
     // 与角色闸同一个遮罩实现，只是 deny 表换成那一组派发/建人入口。
     installTeammateMask(ctx);

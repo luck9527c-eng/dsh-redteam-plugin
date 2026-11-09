@@ -115,6 +115,12 @@ cd $env:USERPROFILE\.dsh\profiles\desktop
   要改文案就改 `cordis.patch.yml` 里这两项，代码里没有默认值。角色仍由 runtime context
   （`team:identity` 一类的 `You are ...`）注入，人设不重复声明；两份都**不带** `complete` 语义，
   也不抑制 runtime context（有回归用例钉着）。
+- **工兵固定路由（2026-11-09）**：宿主让子 agent **继承 Lead 创建那一刻的路由**（`spawn_teammate`
+  的请求里没有 model，团队服务也不传 `agentOptions`），所以 Lead 换模型工兵就跟着换。本包行的
+  `teammateModel` 把工兵钉死在一条固定路由上：非 root 成员建出来后调用一次
+  `agent.model.select(...)`，Lead 自己怎么选都不受影响。同一作用域只钉一次，成员被宿主重建时会在
+  新作用域上再钉一次（这才是「固定」）。配置畸形整份忽略并留一条警告 —— **不会**退回任何猜出来的
+  默认模型：钉错模型会让每个工兵在第一次请求时失败，比不钉更糟。
 - **preset 里不声明 sandbox / approval 设置**：提供服务的插件若随 preset 泄漏到 root realm，注册表会把
   整棵 preset 判成 `broken`；权限属于 host 平面，不是本包职责。
 - **注册用的 schema 有两条宿主约束**（`packages/core/tools/src/json-schema.ts`）：
