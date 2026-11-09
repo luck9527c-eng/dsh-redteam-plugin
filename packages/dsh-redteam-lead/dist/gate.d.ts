@@ -107,6 +107,12 @@ export interface GateInput {
      * 有意的收窄变成静默的放宽。
      */
     gated?: ReadonlySet<string>;
+    /**
+     * 按工具定制的拒绝理由；缺省走 {@link denyReason} 的通用文案。
+     *
+     * 只有**同时**在 `gated` 里的名字才会被拒，所以这里多写几个键是无害的（不会凭空扩大禁表）。
+     */
+    reasons?: GatedToolReasons;
 }
 /** 判定结果：只有 `deny` 带理由（宿主把它原样交给模型）。 */
 export type GateDecision = {
@@ -115,6 +121,14 @@ export type GateDecision = {
     kind: 'deny';
     reason: string;
 };
+/**
+ * 按工具定制的拒绝理由：键是工具名，值是**要追加的正文**（统一前缀由 {@link denyReason} 加）。
+ *
+ * 为什么需要它：同一条闸挡两类完全不同的东西 —— 一类是「自执行/派发入口」，理由该说「派给工兵」；
+ * 另一类是「等同伴」这类**根本不该做**的动作（`wait_agent`：成员完成会自己唤醒你），
+ * 拿「派给工兵」去解释它，模型只会困惑或换个工具硬撞。
+ */
+export type GatedToolReasons = Readonly<Record<string, string>>;
 /**
  * 拒绝理由。三件事必须同时说到，否则模型会原地重试或换个工具硬撞：
  * 1. Lead 不亲自执行（这是身份约束，不是工具坏了）；
@@ -126,7 +140,7 @@ export type GateDecision = {
  *
  * 措辞里刻意不出现「重试」「稍后」这类把拒绝说成暂时故障的词。
  */
-export declare function denyReason(tool: string): string;
+export declare function denyReason(tool: string, reasons?: GatedToolReasons): string;
 /**
  * 纯判定：**只有**「调用方是会话根」且「工具在禁表里」时拒绝。子代与 `unknown` 一律放行（fail-open）。
  *
@@ -141,7 +155,7 @@ export declare function denyReason(tool: string): string;
  * 禁表是**参数**（`gated`），不是模块常量：同一份判定逻辑要被「默认五个」与「本包行配置的那几个」
  * 共用，前者只是后者的缺省值。
  */
-export declare function decideGate({ tool, root, gated }: GateInput): GateDecision;
+export declare function decideGate({ tool, root, gated, reasons }: GateInput): GateDecision;
 /**
  * 用执行上下文里的 agent 查团队成员身份。
  *
@@ -270,7 +284,7 @@ export declare function installTeammateMask(ctx: unknown): boolean;
  *   `installRoleGate` 会把它与「agent 出现 / 状态变化」那条补遮路径**共用**：谁先遮谁留下那条诊断，
  *   另一方看到 `repeat` 静默跳过。缺省自带一个，便于单测直接调用。
  */
-export declare function createRoleGate(ctx: unknown, gated?: ReadonlySet<string>, attempted?: MaskAttempts): PreExecuteListener;
+export declare function createRoleGate(ctx: unknown, gated?: ReadonlySet<string>, attempted?: MaskAttempts, reasons?: GatedToolReasons): PreExecuteListener;
 /**
  * 把角色闸挂到宿主的 `tools/pre-execute` 瀑布上，返回「闸是否真的挂上了」。
  *
@@ -289,4 +303,4 @@ export declare function createRoleGate(ctx: unknown, gated?: ReadonlySet<string>
  * @param ctx 插件自己的 ctx
  * @param gated 本次生效的禁表（`config.gatedTools` 解析出来的那一份）；缺省 = 默认五个
  */
-export declare function installRoleGate(ctx: unknown, gated?: ReadonlySet<string>): boolean;
+export declare function installRoleGate(ctx: unknown, gated?: ReadonlySet<string>, reasons?: GatedToolReasons): boolean;

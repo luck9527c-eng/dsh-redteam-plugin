@@ -118,11 +118,18 @@ test('patch：本包行的 config 只有 gatedTools、两套人设与工兵路�
   assert.ok(configStart >= 0, '本包行必须有 config')
   const body = tail.slice(configStart)
   const keys = [...body.matchAll(/^\s{14}([A-Za-z][A-Za-z0-9]*):/gmu)].map((match) => match[1])
-  assert.deepEqual([...new Set(keys)].sort(), ['gatedTools', 'leadPersona', 'teammateModel', 'teammatePersona'])
+  assert.deepEqual([...new Set(keys)].sort(), ['gatedReasons', 'gatedTools', 'leadPersona', 'teammateModel', 'teammatePersona'])
 })
 
-test('patch：禁表是 shipped 的那五个（shell 也挡，Lead 没有执行通道）', () => {
-  assert.match(PATCH, /^\s*gatedTools:\s*\[pwsh, bash, workflow, subagent, subagent_fork\]\s*$/mu)
+test('patch：禁表是 shipped 的那六个（shell + 派发 + wait_agent）', () => {
+  assert.match(PATCH, /^\s*gatedTools:\s*\[pwsh, bash, workflow, subagent, subagent_fork, wait_agent\]\s*$/mu)
+})
+
+test('patch：wait_agent 带一条专用拒绝理由（通用那句"派给工兵"套不上它）', () => {
+  assert.match(PATCH, /^\s*gatedReasons:\s*$/mu, '必须有 gatedReasons 段')
+  assert.match(PATCH, /^\s*wait_agent:\s*>-\s*$/mu, 'wait_agent 必须用自己的理由')
+  assert.match(PATCH, /不需要等待/u, '理由必须说清"不需要等"')
+  assert.match(PATCH, /唤醒/u, '理由必须告诉模型：完成会唤醒它')
 })
 
 test('人设文本：Lead 那份不再提 rt_*（工具已删，提了就是让模型找不存在的东西）', () => {

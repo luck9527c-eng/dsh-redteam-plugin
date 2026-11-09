@@ -5,7 +5,7 @@ DSH bundle：给模式列表加一个 **红队指挥**（preset id `redteam-lead
 
 | 能力 | 作用 |
 |---|---|
-| **角色闸** | 会话根（Lead）调配置里的那几个工具（shipped：`workflow` / `subagent` / `subagent_fork`）在 `tools/pre-execute` 上被拒，并顺手从它的工具目录里摘掉 |
+| **角色闸** | 会话根（Lead）调配置里的那几个工具（shipped：`workflow` / `subagent` / `subagent_fork` / `pwsh` / `bash` / `wait_agent`）在 `tools/pre-execute` 上被拒，并顺手从它的工具目录里摘掉；`wait_agent` 带专用理由（它不是派发入口，而是"不该等"——见下） |
 | **工兵遮罩** | 非 Lead 的团队成员看不到那组派发/建人入口 |
 | **两套人设** | Lead 一份、工兵一份；原生 DSH 下两者共用同一份（只差 `team:identity` 一句），这是本包存在的核心理由 |
 

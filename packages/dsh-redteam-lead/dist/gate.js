@@ -158,7 +158,11 @@ const ALLOW = Object.freeze({ kind: 'allow' });
  *
  * 措辞里刻意不出现「重试」「稍后」这类把拒绝说成暂时故障的词。
  */
-export function denyReason(tool) {
+export function denyReason(tool, reasons) {
+    const custom = reasons === undefined ? undefined : reasons[tool];
+    if (typeof custom === 'string' && custom.trim().length > 0) {
+        return `[redteam-lead] 拒绝执行 ${tool}：${custom.trim()}`;
+    }
     return (`[redteam-lead] 拒绝执行 ${tool}：Lead 不亲自执行。` +
         '把这件事派给工兵——用底座的 spawn_teammate 建人（一条路线一个人，开场简报手写），派活与追问用 send_message，任务用 team_task_*；' +
         '项目账目同样派出去：project.py 的 seal / index / check / impact 交给一名工兵按你的指令原样执行（只跑命令、不改判断），输出交回你核对；' +
@@ -178,12 +182,12 @@ export function denyReason(tool) {
  * 禁表是**参数**（`gated`），不是模块常量：同一份判定逻辑要被「默认五个」与「本包行配置的那几个」
  * 共用，前者只是后者的缺省值。
  */
-export function decideGate({ tool, root, gated }) {
+export function decideGate({ tool, root, gated, reasons }) {
     if (root !== 'root')
         return ALLOW;
     if (!(gated ?? DEFAULT_GATED_TOOLS).has(tool))
         return ALLOW;
-    return { kind: 'deny', reason: denyReason(tool) };
+    return { kind: 'deny', reason: denyReason(tool, reasons) };
 }
 /**
  * 用执行上下文里的 agent 查团队成员身份。
@@ -694,7 +698,7 @@ export function installTeammateMask(ctx) {
  *   `installRoleGate` 会把它与「agent 出现 / 状态变化」那条补遮路径**共用**：谁先遮谁留下那条诊断，
  *   另一方看到 `repeat` 静默跳过。缺省自带一个，便于单测直接调用。
  */
-export function createRoleGate(ctx, gated = DEFAULT_GATED_TOOLS, attempted = new WeakSet()) {
+export function createRoleGate(ctx, gated = DEFAULT_GATED_TOOLS, attempted = new WeakSet(), reasons) {
     return async function redteamLeadRoleGate(exec, next) {
         const view = recordOf(exec);
         const tool = typeof view.name === 'string' ? view.name : '';
@@ -704,7 +708,7 @@ export function createRoleGate(ctx, gated = DEFAULT_GATED_TOOLS, attempted = new
             if (role === 'lead')
                 applyMask(ctx, exec, attempted, gated);
         }
-        const decision = decideGate({ tool, root, gated });
+        const decision = decideGate({ tool, root, gated, reasons });
         if (decision.kind === 'deny')
             return decision;
         return next();
@@ -728,7 +732,7 @@ export function createRoleGate(ctx, gated = DEFAULT_GATED_TOOLS, attempted = new
  * @param ctx 插件自己的 ctx
  * @param gated 本次生效的禁表（`config.gatedTools` 解析出来的那一份）；缺省 = 默认五个
  */
-export function installRoleGate(ctx, gated = DEFAULT_GATED_TOOLS) {
+export function installRoleGate(ctx, gated = DEFAULT_GATED_TOOLS, reasons) {
     const view = recordOf(ctx);
     const on = view.on;
     const effect = view.effect;
@@ -737,7 +741,7 @@ export function installRoleGate(ctx, gated = DEFAULT_GATED_TOOLS) {
         return false;
     }
     const attempted = new WeakSet();
-    const listener = createRoleGate(view, gated, attempted);
+    const listener = createRoleGate(view, gated, attempted, reasons);
     // LDW-24：会话根的遮罩不能等到它**第一次调工具**才下发。
     //
     // 现场（session-9b9efb94，2026-11-04 01:09）：会话空闲 13 小时后恢复，宿主把 agent 重建了

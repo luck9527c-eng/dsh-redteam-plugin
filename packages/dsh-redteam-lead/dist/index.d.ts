@@ -80,6 +80,20 @@ interface PluginContext {
  */
 export declare function resolveGatedTools(config: unknown, ctx?: unknown): ReadonlySet<string>;
 /**
+ * 解析 `config.gatedReasons`：**按工具定制拒绝理由**。
+ *
+ * 与 `gatedTools` 的规则故意不同：这里**逐条采纳**，坏条目丢掉、其余照常生效，并记一条警告。
+ * 理由只换措辞、不决定挡不挡得住，所以没必要因为一个错字把其它几条好理由一起废掉。
+ *
+ * - 键或值不是「去掉首尾空白后非空」的字符串 → 丢这一条；
+ * - 整个值不是对象 → 全按通用理由，记一条警告（通常是缩进写错）。
+ *
+ * @param config 本包行的 `config`（读 `gatedReasons`）
+ * @param ctx 插件 ctx（诊断走它的 logger）
+ * @returns 工具名 → 理由正文；没配或全坏就是 `undefined`。绝不抛。
+ */
+export declare function resolveGatedReasons(config: unknown, ctx?: unknown): Record<string, string> | undefined;
+/**
  * 装上三件事。在 `apply` 里调用，让 fiber 拥有 disposer。
  *
  * 三件事都**只降级、不抛**（各自的安装器内部吞掉一切）：任一件装不上都不能让另外两件消失 ——

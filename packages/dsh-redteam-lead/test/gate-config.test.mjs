@@ -236,3 +236,60 @@ test('畸形数组的警告点名的是**出错那一项**，不会被前面的�
   assert.equal(configWarnings.length, 1)
   assert.match(configWarnings[0], /第 3 项/u, `警告必须指向第 3 项，实际：${configWarnings[0]}`)
 })
+
+// ---------------------------------------------------------------------------
+// config.gatedReasons：按工具定制的拒绝理由（2026-11-09，wait_agent）
+// ---------------------------------------------------------------------------
+
+/** 一条自定义理由（与 shipped 的那条同义，便于断言关键词）。 */
+const WAIT_REASON = '不需要等待：成员完成会唤醒你，直接去做下一条路线。'
+
+test('gatedReasons：同一条闸能给出两种理由（wait_agent 用自己的，其它用通用的）', async () => {
+  const { lead, gate } = install({
+    gatedTools: ['wait_agent', 'workflow'],
+    gatedReasons: { wait_agent: WAIT_REASON },
+  })
+
+  const waited = await decide(gate, 'wait_agent', lead.agent)
+  assert.equal(waited.kind, 'deny', 'wait_agent 仍必须被拒（理由只换措辞，不放宽）')
+  assert.match(waited.reason, /^\[redteam-lead\] 拒绝执行 wait_agent：/u, '统一前缀要保留，模型才知道是哪个工具')
+  assert.match(waited.reason, /不需要等待/u)
+  assert.doesNotMatch(waited.reason, /派给工兵/u, '定制理由必须顶掉通用那句')
+
+  const delegated = await decide(gate, 'workflow', lead.agent)
+  assert.equal(delegated.kind, 'deny')
+  assert.match(delegated.reason, /派给工兵/u, '没配理由的工具继续走通用文案')
+})
+
+test('gatedReasons 不会扩大禁表：只写了理由、没写进 gatedTools 的工具照样放行', async () => {
+  const { lead, gate } = install({ gatedTools: ['workflow'], gatedReasons: { wait_agent: WAIT_REASON } })
+  assert.equal(await decide(gate, 'wait_agent', lead.agent), 'downstream')
+})
+
+test('gatedReasons 空白/非字符串条目被丢掉：该工具退回通用理由，并恰好一条警告', async () => {
+  const warnings = []
+  const reasons = index.resolveGatedReasons(
+    { gatedReasons: { wait_agent: '   ', workflow: 42, subagent: WAIT_REASON } },
+    { logger: { warn: (message) => warnings.push(String(message)) } },
+  )
+  assert.deepEqual(reasons, { subagent: WAIT_REASON }, '只有合法那条留下（且去空白）')
+  assert.equal(warnings.length, 1, '一轮最多一条汇总警告，不是每条一个')
+  assert.match(warnings[0], /2 条被忽略/u)
+})
+
+test('gatedReasons 整个不是对象：按通用理由，一条警告', async () => {
+  const warnings = []
+  const reasons = index.resolveGatedReasons(
+    { gatedReasons: ['wait_agent'] },
+    { logger: { warn: (message) => warnings.push(String(message)) } },
+  )
+  assert.equal(reasons, undefined)
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0], /gatedReasons/u)
+})
+
+test('gatedReasons 缺省：解析成 undefined，且一条警告都不记', () => {
+  const warnings = []
+  assert.equal(index.resolveGatedReasons({}, { logger: { warn: (m) => warnings.push(String(m)) } }), undefined)
+  assert.deepEqual(warnings, [])
+})

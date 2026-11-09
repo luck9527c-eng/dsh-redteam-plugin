@@ -170,10 +170,25 @@ export interface GateInput {
    * 有意的收窄变成静默的放宽。
    */
   gated?: ReadonlySet<string>
+  /**
+   * 按工具定制的拒绝理由；缺省走 {@link denyReason} 的通用文案。
+   *
+   * 只有**同时**在 `gated` 里的名字才会被拒，所以这里多写几个键是无害的（不会凭空扩大禁表）。
+   */
+  reasons?: GatedToolReasons
 }
 
 /** 判定结果：只有 `deny` 带理由（宿主把它原样交给模型）。 */
 export type GateDecision = { kind: 'allow' } | { kind: 'deny', reason: string }
+
+/**
+ * 按工具定制的拒绝理由：键是工具名，值是**要追加的正文**（统一前缀由 {@link denyReason} 加）。
+ *
+ * 为什么需要它：同一条闸挡两类完全不同的东西 —— 一类是「自执行/派发入口」，理由该说「派给工兵」；
+ * 另一类是「等同伴」这类**根本不该做**的动作（`wait_agent`：成员完成会自己唤醒你），
+ * 拿「派给工兵」去解释它，模型只会困惑或换个工具硬撞。
+ */
+export type GatedToolReasons = Readonly<Record<string, string>>
 
 const ALLOW: GateDecision = Object.freeze({ kind: 'allow' })
 
@@ -188,7 +203,11 @@ const ALLOW: GateDecision = Object.freeze({ kind: 'allow' })
  *
  * 措辞里刻意不出现「重试」「稍后」这类把拒绝说成暂时故障的词。
  */
-export function denyReason(tool: string): string {
+export function denyReason(tool: string, reasons?: GatedToolReasons): string {
+  const custom = reasons === undefined ? undefined : reasons[tool]
+  if (typeof custom === 'string' && custom.trim().length > 0) {
+    return `[redteam-lead] 拒绝执行 ${tool}：${custom.trim()}`
+  }
   return (
     `[redteam-lead] 拒绝执行 ${tool}：Lead 不亲自执行。` +
     '把这件事派给工兵——用底座的 spawn_teammate 建人（一条路线一个人，开场简报手写），派活与追问用 send_message，任务用 team_task_*；' +
@@ -211,10 +230,10 @@ export function denyReason(tool: string): string {
  * 禁表是**参数**（`gated`），不是模块常量：同一份判定逻辑要被「默认五个」与「本包行配置的那几个」
  * 共用，前者只是后者的缺省值。
  */
-export function decideGate({ tool, root, gated }: GateInput): GateDecision {
+export function decideGate({ tool, root, gated, reasons }: GateInput): GateDecision {
   if (root !== 'root') return ALLOW
   if (!(gated ?? DEFAULT_GATED_TOOLS).has(tool)) return ALLOW
-  return { kind: 'deny', reason: denyReason(tool) }
+  return { kind: 'deny', reason: denyReason(tool, reasons) }
 }
 
 /**
@@ -773,6 +792,7 @@ export function createRoleGate(
   ctx: unknown,
   gated: ReadonlySet<string> = DEFAULT_GATED_TOOLS,
   attempted: MaskAttempts = new WeakSet<object>(),
+  reasons?: GatedToolReasons,
 ): PreExecuteListener {
   return async function redteamLeadRoleGate(exec, next) {
     const view = recordOf(exec)
@@ -782,7 +802,7 @@ export function createRoleGate(
       const role: GateRole = await resolveRole(ctx, exec)
       if (role === 'lead') applyMask(ctx, exec, attempted, gated)
     }
-    const decision = decideGate({ tool, root, gated })
+    const decision = decideGate({ tool, root, gated, reasons })
     if (decision.kind === 'deny') return decision
     return next()
   }
@@ -806,7 +826,11 @@ export function createRoleGate(
  * @param ctx 插件自己的 ctx
  * @param gated 本次生效的禁表（`config.gatedTools` 解析出来的那一份）；缺省 = 默认五个
  */
-export function installRoleGate(ctx: unknown, gated: ReadonlySet<string> = DEFAULT_GATED_TOOLS): boolean {
+export function installRoleGate(
+  ctx: unknown,
+  gated: ReadonlySet<string> = DEFAULT_GATED_TOOLS,
+  reasons?: GatedToolReasons,
+): boolean {
   const view = recordOf(ctx)
   const on = view.on
   const effect = view.effect
@@ -816,7 +840,7 @@ export function installRoleGate(ctx: unknown, gated: ReadonlySet<string> = DEFAU
   }
 
   const attempted: MaskAttempts = new WeakSet<object>()
-  const listener = createRoleGate(view, gated, attempted)
+  const listener = createRoleGate(view, gated, attempted, reasons)
 
   // LDW-24：会话根的遮罩不能等到它**第一次调工具**才下发。
   //

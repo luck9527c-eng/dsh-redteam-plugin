@@ -34,7 +34,7 @@ import { DEFAULT_GATED_TOOLS, GATE_LABEL, installRoleGate, installTeammateMask, 
 import { installPresetPersona, installTeammatePersona } from './persona.js';
 // —— 工兵固定路由（2026-11-09）：非 root 成员建出来后钉住 provider/model/effort ——
 import { installTeammateModel } from './teammate-model.js';
-import { recordOf } from './guards.js';
+import { recordOf, isRecord } from './guards.js';
 /** 插件名（插件清单/日志用）。 */
 export const name = 'redteam-lead-tools';
 /**
@@ -105,6 +105,47 @@ function gatedToolsOf(value) {
     }
     return { names };
 }
+/**
+ * 解析 `config.gatedReasons`：**按工具定制拒绝理由**。
+ *
+ * 与 `gatedTools` 的规则故意不同：这里**逐条采纳**，坏条目丢掉、其余照常生效，并记一条警告。
+ * 理由只换措辞、不决定挡不挡得住，所以没必要因为一个错字把其它几条好理由一起废掉。
+ *
+ * - 键或值不是「去掉首尾空白后非空」的字符串 → 丢这一条；
+ * - 整个值不是对象 → 全按通用理由，记一条警告（通常是缩进写错）。
+ *
+ * @param config 本包行的 `config`（读 `gatedReasons`）
+ * @param ctx 插件 ctx（诊断走它的 logger）
+ * @returns 工具名 → 理由正文；没配或全坏就是 `undefined`。绝不抛。
+ */
+export function resolveGatedReasons(config, ctx) {
+    const raw = recordOf(config).gatedReasons;
+    if (raw === undefined)
+        return undefined;
+    // `isRecord` 对数组也返回 true（它只看「非 null 的 object」），而数组在这里是**畸形**：
+    // 当成对象展开会得到 `{ '0': 'wait_agent' }` 这种键，等于把下标当工具名。
+    if (!isRecord(raw) || Array.isArray(raw)) {
+        logAt(ctx, GATE_LABEL, `config.gatedReasons 形状不合法（实际是${describeConfigValue(raw)}）：应为「工具名 → 理由文本」的对象；` +
+            '本次全部按通用理由拒绝');
+        return undefined;
+    }
+    const reasons = {};
+    const dropped = [];
+    for (const [rawKey, rawValue] of Object.entries(raw)) {
+        const key = rawKey.trim();
+        const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+        if (key.length === 0 || value.length === 0) {
+            dropped.push(rawKey);
+            continue;
+        }
+        reasons[key] = value;
+    }
+    if (dropped.length > 0) {
+        logAt(ctx, GATE_LABEL, `config.gatedReasons 里有 ${dropped.length} 条被忽略（键或值不是非空字符串）：${dropped.join('、')}；` +
+            '其余照常生效');
+    }
+    return reasons;
+}
 /** 畸形配置诊断里的「实际是什么」：只说形状，不把整份配置倒进日志。 */
 function describeConfigValue(value) {
     if (value === null)
@@ -132,7 +173,7 @@ export function apply(ctx, config = {}) {
     // 角色闸（LDW-1 / LDW-19）：本 preset 的**会话根 agent** 调配置里的那几个工具时在
     // `tools/pre-execute` 瀑布上拒绝，理由指向「派给工兵」。判据是会话头里的根/子代信息
     // （`rootOf`），不需要任何服务；头读不出来就放行（fail-open，不误伤工兵）。
-    installRoleGate(ctx, resolveGatedTools(config, ctx));
+    installRoleGate(ctx, resolveGatedTools(config, ctx), resolveGatedReasons(config, ctx));
     // 人设（LDW-16）：先把 preset 层的共享人设（Lead 那份）注册到本插件的 ctx 上，
     // 再让每个非 Lead 的团队成员在自己 ctx 上盖同名段（scoped 遮蔽 preset 那份，只影响自己）。
     installPresetPersona(ctx, config);
