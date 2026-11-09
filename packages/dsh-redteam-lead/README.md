@@ -153,6 +153,12 @@ cd $env:USERPROFILE\.dsh\profiles\desktop
 6. **`re/env/tools.json` 目前没有生产者**（DECISIONS D11）：skill 侧没有生成命令，本机零个真实实例。
    本包没有任何工具消费这份清单（派发时代的能力匹配已删）；`projectAdapter.probe()` 只在项目副本缺
    `references/tool-inventory.md` 时报一条**非阻塞**的缺口，且它不会自己扫描或生成清单。
+7. **`list_agents` 里的 `model` 是创建时的快照，不是实时路由**（2026-11-09）：宿主的成员行读的是创建时
+   写下的 `subagent/descriptor`（`agentModel` / `agentReasoningEffort`），而本包的工兵固定路由是在
+   `agent/created` 之后才 `select` —— 比那份快照晚几毫秒。所以工兵行显示的是**继承来的父路由**，真实
+   生效的是 `teammateModel` 里钉的那条：要看真的，读该工兵自己会话的 `request/header.config`。
+   现场（实测）：描述符写 `hy4free / high`，3 毫秒后的 `model/selection` 与随后的 `request/header`
+   都是 `deepseek-v4.1-flash / max`。**不要用 `list_agents` 的 `model` 判断固定路由是否生效。**
 
 ## 开发
 
