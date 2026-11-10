@@ -146,6 +146,32 @@ export const TEAMMATE_DENIED_TOOLS = new Set([
 export function isTeammateRole(role) {
     return role === 'teammate' || role === 'other';
 }
+/**
+ * **非 root 团队成员**的禁表（2026-11-10）。
+ *
+ * 只有 `wait_agent` 一个，理由各不相同：
+ * - 它在团队工具插件里是**按 agent 自己的 ctx** 注册的（own 层），`tools.restrict` 摘不掉 —— 遮罩永远够不着；
+ * - 服务层也**不拦**：`waitForChange` 只解析成员身份、不做角色校验，工兵调它是合法的；
+ * - 现场（`session-4a879223` 的 `sapper-runtime`）：37 次调用、**0 次超时**、累计阻塞 **1087 秒**。
+ *   它等的是「Lead 放行」，可 `wait_agent` 等的是「团队里任意变化」——同一队里别人写任务板、
+ *   另一个成员切状态，都会把它叫醒，醒来发现不是要的东西，再等一次 → 自旋。
+ *
+ * `spawn_teammate` 故意**不**放进来：服务层已经用 `TEAM_LEAD_REQUIRED` 拒了它，
+ * 闸再拦一次只是多一条重复理由，而挡不住的那部分（own 层注册）两边一样挡不住。
+ */
+export const TEAMMATE_GATED_TOOLS = new Set(['wait_agent']);
+/**
+ * 工兵侧的拒绝理由。
+ *
+ * 与 Lead 那条（"成员完成会唤醒你"）**不同**：工兵不是指挥，它等的是「放行」，
+ * 而它没有对等同伴可等。真正该做的是把状态报回 Lead、结束回合 —— Lead 一说话就把它唤醒。
+ */
+export function teammateDenyReason(tool) {
+    return (`[redteam-lead] 拒绝执行 ${tool}：你没有对等同伴。` +
+        '等 Lead 放行不需要阻塞——把状态或待放行的事项用 send_message 报回去，然后结束回合：' +
+        'Lead 一说话会唤醒你（inactive 目标会被投递唤醒）。' +
+        '阻塞等待只会让你被团队里无关的变动反复叫醒，白白占掉你自己那条路线的时间。');
+}
 const ALLOW = Object.freeze({ kind: 'allow' });
 /**
  * 拒绝理由。三件事必须同时说到，否则模型会原地重试或换个工具硬撞：
@@ -182,12 +208,20 @@ export function denyReason(tool, reasons) {
  * 禁表是**参数**（`gated`），不是模块常量：同一份判定逻辑要被「默认五个」与「本包行配置的那几个」
  * 共用，前者只是后者的缺省值。
  */
-export function decideGate({ tool, root, gated, reasons }) {
-    if (root !== 'root')
-        return ALLOW;
-    if (!(gated ?? DEFAULT_GATED_TOOLS).has(tool))
-        return ALLOW;
-    return { kind: 'deny', reason: denyReason(tool, reasons) };
+export function decideGate({ tool, root, gated, reasons, teammateGated, role }) {
+    if (root === 'root') {
+        if (!(gated ?? DEFAULT_GATED_TOOLS).has(tool))
+            return ALLOW;
+        return { kind: 'deny', reason: denyReason(tool, reasons) };
+    }
+    // 非 root：只拦**团队成员**，且只拦 {@link TEAMMATE_GATED_TOOLS} 里那几个名字。
+    // bare subagent 的 role 是 'unknown' —— 它不在团队里，这条闸不适用于它。
+    if (root === 'child' && isTeammateRole(role ?? 'unknown')) {
+        if ((teammateGated ?? TEAMMATE_GATED_TOOLS).has(tool)) {
+            return { kind: 'deny', reason: teammateDenyReason(tool) };
+        }
+    }
+    return ALLOW;
 }
 /**
  * 用执行上下文里的 agent 查团队成员身份。
@@ -703,12 +737,12 @@ export function createRoleGate(ctx, gated = DEFAULT_GATED_TOOLS, attempted = new
         const view = recordOf(exec);
         const tool = typeof view.name === 'string' ? view.name : '';
         const root = rootOf(exec);
-        if (root === 'root') {
-            const role = await resolveRole(ctx, exec);
-            if (role === 'lead')
-                applyMask(ctx, exec, attempted, gated);
-        }
-        const decision = decideGate({ tool, root, gated, reasons });
+        // 角色只在两种位置用得上：root 决定「要不要遮罩」，child 决定「是不是团队成员」（2026-11-10 的工兵闸）。
+        // `unknown`（会话头读不出来）不查服务、一律放行 —— 与 fail-open 的既有取向一致。
+        const role = root === 'unknown' ? 'unknown' : await resolveRole(ctx, exec);
+        if (root === 'root' && role === 'lead')
+            applyMask(ctx, exec, attempted, gated);
+        const decision = decideGate({ tool, root, gated, reasons, role });
         if (decision.kind === 'deny')
             return decision;
         return next();

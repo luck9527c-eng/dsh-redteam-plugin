@@ -6,7 +6,7 @@ DSH bundle：给模式列表加一个 **红队指挥**（preset id `redteam-lead
 | 能力 | 作用 |
 |---|---|
 | **角色闸** | 会话根（Lead）调配置里的那几个工具（shipped：`workflow` / `subagent` / `subagent_fork` / `pwsh` / `bash` / `wait_agent`）在 `tools/pre-execute` 上被拒，并顺手从它的工具目录里摘掉；`wait_agent` 带专用理由（它不是派发入口，而是"不该等"——见下） |
-| **工兵遮罩** | 非 Lead 的团队成员看不到那组派发/建人入口 |
+| **工兵遮罩** | 非 Lead 的团队成员看不到那组派发/建人入口。能摘的只有**继承层**；`spawn_teammate` / `wait_agent` 在 own 层摘不掉，分别由服务层与闸兜底（见下） |
 | **两套人设** | Lead 一份、工兵一份；原生 DSH 下两者共用同一份（只差 `team:identity` 一句），这是本包存在的核心理由 |
 
 **建人与派活不在本包里**：建工兵用宿主原生的 `spawn_teammate`（Lead 手写开场简报），派活/追问用
@@ -97,8 +97,14 @@ cd $env:USERPROFILE\.dsh\profiles\desktop
     `origin: 'subagent'`、没有 `parentSession`）时，`pwsh` / `bash` / `workflow` /
     `subagent` / `subagent_fork` 一律拒绝；理由直接告诉模型「把这件事派给工兵」，并点名仍可用的核对
     手段（`read` / `grep`，已派作业用 `job_list` / `job_output` 读）。
-  - **工兵遮罩（LDW-15）**：`role=teammate` 的成员看不到 `spawn_teammate` / `subagent` / `subagent_fork` /
-    `workflow`；`send_message` / `team_task_*` / `list_agents` / `pwsh` 照常保留（前三个在 own 层，遮不掉但宿主会拒）。
+  - **工兵遮罩（LDW-15；2026-11-10 修订）**：`role=teammate` 的成员看不到 `subagent` / `subagent_fork` /
+    `workflow`（这三个在 preset 层，可摘）。**`spawn_teammate` 与 `wait_agent` 摘不掉** —— 团队工具插件是在
+    每个 agent **自己的 ctx** 上注册它们的（own 层），而 `tools.restrict` 只裁继承层。所以两者分头兜底：
+    `spawn_teammate` 由服务层拒（`TEAM_LEAD_REQUIRED`）；`wait_agent` 服务层**不拦**，改由角色闸在
+    `tools/pre-execute` 上直接拒，理由说的是「你没有对等同伴，等放行不需要阻塞」（`TEAMMATE_GATED_TOOLS`）。
+    现场依据：`session-4a879223` 的 `sapper-runtime` 37 次 `wait_agent`、**0 次超时**、累计阻塞 **1087 秒** ——
+    它等的是「Lead 放行」，而 `wait_agent` 等的是「团队里任意变化」，于是被别人的任务板改动反复叫醒、自旋。
+    工兵侧的 `send_message` / `team_task_*` / `list_agents` / `pwsh` 照常保留。
   - 两者都**先遮后判**：命中后用 `agent.ctx.tools.restrict({ deny })` 把这几个名字从**该 agent** 的工具
     目录里拿掉（只传 `DENY_TOOLS ∩ 该 scope 的可遮名单`，交集为空就不调用）；遮罩失败、名单取不到或
     `restrict` 缺席，一律静默退回 deny-only 并留一条诊断。会话头读不出来（或调用方本来就是子代 agent）

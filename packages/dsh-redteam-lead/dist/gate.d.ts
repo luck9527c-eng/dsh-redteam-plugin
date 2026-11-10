@@ -94,6 +94,27 @@ export declare function rootOf(exec: unknown): AgentRoot;
 export declare const TEAMMATE_DENIED_TOOLS: ReadonlySet<string>;
 /** 判定语义：`tryMembership` 认得出、且不是 Lead，就是这张表要服务的对象（bare subagent 不算）。 */
 export declare function isTeammateRole(role: GateRole): boolean;
+/**
+ * **非 root 团队成员**的禁表（2026-11-10）。
+ *
+ * 只有 `wait_agent` 一个，理由各不相同：
+ * - 它在团队工具插件里是**按 agent 自己的 ctx** 注册的（own 层），`tools.restrict` 摘不掉 —— 遮罩永远够不着；
+ * - 服务层也**不拦**：`waitForChange` 只解析成员身份、不做角色校验，工兵调它是合法的；
+ * - 现场（`session-4a879223` 的 `sapper-runtime`）：37 次调用、**0 次超时**、累计阻塞 **1087 秒**。
+ *   它等的是「Lead 放行」，可 `wait_agent` 等的是「团队里任意变化」——同一队里别人写任务板、
+ *   另一个成员切状态，都会把它叫醒，醒来发现不是要的东西，再等一次 → 自旋。
+ *
+ * `spawn_teammate` 故意**不**放进来：服务层已经用 `TEAM_LEAD_REQUIRED` 拒了它，
+ * 闸再拦一次只是多一条重复理由，而挡不住的那部分（own 层注册）两边一样挡不住。
+ */
+export declare const TEAMMATE_GATED_TOOLS: ReadonlySet<string>;
+/**
+ * 工兵侧的拒绝理由。
+ *
+ * 与 Lead 那条（"成员完成会唤醒你"）**不同**：工兵不是指挥，它等的是「放行」，
+ * 而它没有对等同伴可等。真正该做的是把状态报回 Lead、结束回合 —— Lead 一说话就把它唤醒。
+ */
+export declare function teammateDenyReason(tool: string): string;
 /** 纯判定的入参：工具名与会话位置都已经由可测的探针解析好。 */
 export interface GateInput {
     /** 即将执行的工具名（`exec.name`）。 */
@@ -113,6 +134,15 @@ export interface GateInput {
      * 只有**同时**在 `gated` 里的名字才会被拒，所以这里多写几个键是无害的（不会凭空扩大禁表）。
      */
     reasons?: GatedToolReasons;
+    /** 非 root 团队成员的禁表；缺省 = {@link TEAMMATE_GATED_TOOLS}。 */
+    teammateGated?: ReadonlySet<string>;
+    /**
+     * 调用方在团队里的角色。
+     *
+     * 只在 `root === 'child'` 时参与判定（非 root 团队成员的禁表）；`'unknown'` 一律放行 ——
+     * bare subagent 不在团队里，不归这条闸管。
+     */
+    role?: GateRole;
 }
 /** 判定结果：只有 `deny` 带理由（宿主把它原样交给模型）。 */
 export type GateDecision = {
@@ -155,7 +185,7 @@ export declare function denyReason(tool: string, reasons?: GatedToolReasons): st
  * 禁表是**参数**（`gated`），不是模块常量：同一份判定逻辑要被「默认五个」与「本包行配置的那几个」
  * 共用，前者只是后者的缺省值。
  */
-export declare function decideGate({ tool, root, gated, reasons }: GateInput): GateDecision;
+export declare function decideGate({ tool, root, gated, reasons, teammateGated, role }: GateInput): GateDecision;
 /**
  * 用执行上下文里的 agent 查团队成员身份。
  *
